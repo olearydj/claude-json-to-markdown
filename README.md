@@ -30,6 +30,9 @@ Once the export has been processed, you will receive a download link via the ema
     - Uses a `logging_config.json` for configurable log formatting and levels (if present next to the `log_setup.py` module).
 - **Command-Line Interface:** Simple and straightforward CLI powered by Typer.
 
+> [!NOTE]
+> This project uses and recommends [`uv`](https://github.com/astral-sh/uv) for Python package and project management. Not just (way) faster, (way) better.
+
 ## Usage
 
 The quickest way to use `cj2md` without a full local installation is with `uvx`. If you plan to use the tool regularly or contribute to its development, see the [Installation](#installation) section below.
