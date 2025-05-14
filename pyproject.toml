@@ -1,0 +1,48 @@
+[project]
+name = "claude-json-to-markdown"
+version = "0.1.0"
+description = "Convert JSON data from Anthropic's JSON exports to Markdown files"
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [
+    { name = "Dan O'Leary", email = "oleary.dj@gmail.com" },
+]
+license = { text = "MIT" }
+keywords = ["json", "markdown", "anthropic", "claude", "converter", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "typer~=0.12.3",
+    "click~=8.1.7",
+    "rich~=13.7.0",
+    "platformdirs>=3.0.0"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/yourusername/claude-json-to-markdown" # Placeholder
+"Bug Tracker" = "https://github.com/yourusername/claude-json-to-markdown/issues" # Placeholder
+
+# PEP 735: Development dependencies
+[dependency-groups]
+test = [
+    "pytest>=8.0.0",
+    "pytest-mock"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+cj2md = "claude_json2md.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claude_json2md"]
