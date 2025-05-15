@@ -38,15 +38,15 @@ def create_sample_json(file_path, conversations_data):
 def run_script_command(input_file, output_dir, limit=None):
     env = os.environ.copy()
     # PYTHONPATH manipulation is likely not needed anymore if cj2md is correctly installed in the venv
-    
+
     cmd = [
         "cj2md",  # Use the installed script/entry point
-        str(input_file), 
-        str(output_dir)
+        str(input_file),
+        str(output_dir),
     ]
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
-        
+
     return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
 
 

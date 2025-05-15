@@ -15,9 +15,7 @@ DEFAULT_LOG_FILENAME = "converter.log"
 def setup_logging(log_path_override: Optional[Path] = None):
     """Loads logging configuration and sets up log file path."""
 
-    config_file = (
-        Path(__file__).parent / "logging_config.json"
-    )
+    config_file = Path(__file__).parent / "logging_config.json"
 
     log_file_path_to_log = ""
     is_custom_path = False

@@ -30,22 +30,11 @@ Once the export has been processed, you will receive a download link via the ema
     - Uses a `logging_config.json` for configurable log formatting and levels (if present next to the `log_setup.py` module).
 - **Command-Line Interface:** Simple and straightforward CLI powered by Typer.
 
-> [!NOTE]
-> This project uses and recommends [`uv`](https://github.com/astral-sh/uv) for Python package and project management. Not just (way) faster, (way) better.
-
-## Usage
-
-The quickest way to use `cj2md` without a full local installation is with `uvx`. If you plan to use the tool regularly or contribute to its development, see the [Installation](#installation) section below.
-
-### Run with `uvx`
-
-`uvx` temporarily installs the package and its dependencies in an isolated environment and runs the specified command:
+## Syntax
 
 ```bash
-uvx cj2md [OPTIONS] JSON_INPUT_FILE [MARKDOWN_OUTPUT_DIRECTORY]
+cj2md [OPTIONS] JSON_INPUT_FILE [MARKDOWN_OUTPUT_DIRECTORY]
 ```
-
-Arguments and Options:
 
 *   `JSON_INPUT_FILE`: (Required) Path to the input JSON file containing the conversation data.
 *   `MARKDOWN_OUTPUT_DIRECTORY`: (Required) Path to the directory where the output Markdown files will be saved. If the directory doesn't exist, it will be created.
@@ -68,68 +57,45 @@ This command will:
 3.  Save the resulting Markdown files into the `output_markdown` directory (creating it if it doesn't exist).
 4.  Write log messages to `./logs/conversion.log`.
 
-## Installation
+## Usage
 
-If you prefer to install `cj2md` locally (e.g., for development), follow these instructions:
+> [!NOTE]
+> This project uses and recommends [`uv`](https://github.com/astral-sh/uv) for Python package and project management.
+> Not just (way) faster, (way) better.
 
-1.  **Clone the repository (if you haven't already)**
-   
-    ```bash
-    git clone <your-repository-url> # Replace with your actual repo URL
-    cd claude-json-to-markdown
-    ```
+### Run from PyPI with `pipx` or `uvx`
 
-2.  **Install the package with its dependencies using `uv`:**
+This is the quickest and recommended way to use `cj2md` without a full local installation. `pipx` and `uvx` (an alias for `uv tool run`) install the package and its dependencies in an isolated environment and run the specified command. This keeps your global Python environment clean and allows you to use `cj2md` as a stand alone tool.
 
-    ```bash
-    uv sync
-    ```
-
-    The `uv sync` command will create a virtual environment (in `.venv` by default) and install all runtime and development dependencies defined in `pyproject.toml`. It also installs the package in editable mode, so changes to the source code are immediately available.
-
-3. **Run the tool with `uv`"**
-   
-   ```bash
-   uv run cj2md ...
-   ```
-
-If you prefer to use `pip`, you probably know the drill:
+**Using `uvx`:**
 
 ```bash
-git clone <your-repository-url>  # Replace with actual repo
-cd claude-json-to-markdown
-python -m venv .venv
-source .venv/bin/activate
-pip install .
-pip install .[test]
+uvx cj2md [OPTIONS] JSON_INPUT_FILE [MARKDOWN_OUTPUT_DIRECTORY]
 ```
 
-## Running Tests
-
-To run the test suite (which includes unit and integration tests):
-
-1.  Ensure you have installed the test dependencies, which `uv sync` handles automagically.
-2.  Navigate to the project root directory.
-3.  Run pytest using `uv`:
-
-    ```bash
-    uv run pytest
-    ```
-
-If you are still using `pip`:
+**Using `pipx`:**
 
 ```bash
-source .venv/bin/activate
-pytest
+pipx run cj2md [OPTIONS] JSON_INPUT_FILE [MARKDOWN_OUTPUT_DIRECTORY]
 ```
 
-## Logging Behavior
+### Install PyPI Package into a Virtual Environment
 
-- The application uses Python's standard `logging` module, along with some [`rich` goodness](https://github.com/Textualize/rich).
-- By default (if `logging_config.json` is not found alongside `log_setup.py` in the installed package or during development in `src/claude_json2md/`), a basic emergency logger is set up for critical errors, and platform-specific user log directories are used for regular file logging.
-- If `logging_config.json` *is* present (expected to be in `src/claude_json2md/` alongside `log_setup.py`), it defines the logging format, levels, and handlers. The default configuration includes a console handler and a file handler.
-- The `DEFAULT_LOG_FILENAME` is `converter.log`.
-- The `APP_NAME` for `platformdirs` is "JSONToMarkdownConverter" and `APP_AUTHOR` is "ConverterApp" (this can be customized in `src/claude_json2md/log_setup.py`).
+If you prefer to install `cj2md` as a regular package into a specific virtual environment (e.g., to use it as part of a larger project or script), you can do so using `uv` or `pip`.
+
+**The `uv` way:**
+
+```bash
+# Assumes you are working in a project managed with pyproject.toml
+uv add claude-json-to-markdown 
+```
+
+**The `pip` way:**
+
+```bash
+# In your active virtual environment
+pip install claude-json-to-markdown
+```
 
 ## Project Structure
 
@@ -144,6 +110,56 @@ The project is structured as an installable Python package:
 -   `pyproject.toml`: Defines project metadata, dependencies, and build system configuration.
 
 This structure allows the tool to be installed and run as a command-line utility (`cj2md`).
+
+## Logging Behavior
+
+- The application uses Python's standard `logging` module, along with some [`rich` goodness](https://github.com/Textualize/rich).
+- By default (if `logging_config.json` is not found alongside `log_setup.py` in the installed package or during development in `src/claude_json2md/`), a basic emergency logger is set up for critical errors, and platform-specific user log directories are used for regular file logging.
+- If `logging_config.json` *is* present (expected to be in `src/claude_json2md/` alongside `log_setup.py`), it defines the logging format, levels, and handlers. The default configuration includes a console handler and a file handler.
+- The `DEFAULT_LOG_FILENAME` is `converter.log`.
+- The `APP_NAME` for `platformdirs` is "JSONToMarkdownConverter" and `APP_AUTHOR` is "ConverterApp" (this can be customized in `src/claude_json2md/log_setup.py`).
+
+## Changelog
+
+### 0.1.0 (2025-05-15)
+
+- Initial release
+- Core functionality for converting Claude JSON exports to Markdown
+- Support for processing multiple conversations from a single JSON file
+- Command-line interface with options for limiting processing and custom logging
+- Intelligent naming of output files based on conversation metadata
+- Comprehensive logging for tracking conversion progress and issues
+
+## Limitations
+
+- `cj2md` does not support the projects data included with the data Anthropic exports. There is not obvious way to link conversations to projects, though it seems that the conversations data includes all those related to projects.
+- `cj2md` exports to not include the internal "thinking" dialogue sometimes used by Claude. This data is included in the conversations data, but isn't currently captured in `cj2md` output.
+
+## Issues & Contributions
+
+### Reporting Issues
+
+If you encounter any problems with the tool, please [open an issue](https://github.com/olearydj/claude-json-to-markdown/issues) on GitHub with:
+
+- A clear description of the problem
+- Steps to reproduce the issue
+- Expected vs. actual behavior
+- Your environment details (OS, Python version)
+- Sample data (sanitized appropriately!)
+
+### Contributing
+
+Contributions are welcome! Here's how you can help:
+
+1. **Fork the repository** and clone your fork
+2. **Create a feature branch**: `git checkout -b feature/your-feature-name`
+3. **Make your changes** and add tests if applicable
+4. **Run the tests** to ensure everything works: `uv run pytest`
+5. **Commit your changes**: `git commit -m "Add your feature description"`
+6. **Push to your branch**: `git push origin feature/your-feature-name`
+7. **Create a pull request** from your fork to the main repository
+
+Please follow the existing code style and include appropriate tests for new functionality. The development setup is described above.
 
 ## License
 
