@@ -35,7 +35,7 @@ def create_sample_json(file_path, conversations_data):
         json.dump(conversations_data, f)
 
 
-def run_script_command(input_file, output_dir, limit=None):
+def run_script_command(input_file, output_dir, limit=None, extra_args=None):
     env = os.environ.copy()
     # PYTHONPATH manipulation is likely not needed anymore if cj2md is correctly installed in the venv
 
@@ -46,6 +46,8 @@ def run_script_command(input_file, output_dir, limit=None):
     ]
     if limit is not None:
         cmd.extend(["--limit", str(limit)])
+    if extra_args:
+        cmd.extend(extra_args)
 
     return subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
 
@@ -171,6 +173,150 @@ def test_limit_argument(temp_test_env):
     assert len(output_files) == 2, (
         f"Expected 2 MD files with limit=2, found {len(output_files)}."
     )
+
+
+def test_full_conversion_with_new_content_types(temp_test_env):
+    """Test conversion with thinking, tools, voice notes, and citations."""
+    input_file = temp_test_env["input_file_path"]
+    output_dir = temp_test_env["output_dir"]
+
+    sample_data = [
+        {
+            "uuid": "full-test-001",
+            "name": "Full Feature Test",
+            "created_at": "2024-01-01T10:00:00Z",
+            "updated_at": "2024-01-01T11:00:00Z",
+            "summary": "A comprehensive test conversation.",
+            "chat_messages": [
+                {
+                    "sender": "human",
+                    "created_at": "2024-01-01T10:01:00Z",
+                    "content": [
+                        {
+                            "type": "voice_note",
+                            "title": "Question",
+                            "text": "What is Python?",
+                        }
+                    ],
+                },
+                {
+                    "sender": "assistant",
+                    "created_at": "2024-01-01T10:02:00Z",
+                    "content": [
+                        {"type": "thinking", "thinking": "Let me search for info..."},
+                        {
+                            "type": "tool_use",
+                            "name": "web_search",
+                            "input": {"query": "Python programming"},
+                        },
+                        {
+                            "type": "text",
+                            "text": "Python is a programming language.",
+                            "citations": [{"url": "https://python.org"}],
+                        },
+                    ],
+                },
+            ],
+        }
+    ]
+    create_sample_json(input_file, sample_data)
+
+    result = run_script_command(input_file, output_dir)
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+    output_files = list(output_dir.glob("*.md"))
+    assert len(output_files) == 1
+
+    with open(output_files[0], "r") as f:
+        content = f.read()
+
+    assert "**Summary:**" in content
+    assert "A comprehensive test conversation." in content
+    assert "[Voice Note: Question]" in content
+    assert "<summary>Thinking</summary>" in content
+    assert "**Tool: web_search**" in content
+    assert "## References" in content
+    assert "https://python.org" in content
+
+
+def test_cli_no_thinking_flag(temp_test_env):
+    """Test the --no-thinking CLI flag."""
+    input_file = temp_test_env["input_file_path"]
+    output_dir = temp_test_env["output_dir"]
+
+    sample_data = [
+        {
+            "uuid": "flag-test-001",
+            "name": "Flag Test",
+            "created_at": "2024-01-01T10:00:00Z",
+            "updated_at": "2024-01-01T11:00:00Z",
+            "chat_messages": [
+                {
+                    "sender": "assistant",
+                    "created_at": "2024-01-01T10:01:00Z",
+                    "content": [
+                        {"type": "thinking", "thinking": "Secret thinking"},
+                        {"type": "text", "text": "Public response"},
+                    ],
+                }
+            ],
+        }
+    ]
+    create_sample_json(input_file, sample_data)
+
+    result = run_script_command(input_file, output_dir, extra_args=["--no-thinking"])
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+    output_files = list(output_dir.glob("*.md"))
+    assert len(output_files) == 1
+
+    with open(output_files[0], "r") as f:
+        content = f.read()
+
+    assert "Secret thinking" not in content
+    assert "Public response" in content
+
+
+def test_cli_no_tools_flag(temp_test_env):
+    """Test the --no-tools CLI flag."""
+    input_file = temp_test_env["input_file_path"]
+    output_dir = temp_test_env["output_dir"]
+
+    sample_data = [
+        {
+            "uuid": "tools-flag-test",
+            "name": "Tools Flag Test",
+            "created_at": "2024-01-01T10:00:00Z",
+            "updated_at": "2024-01-01T11:00:00Z",
+            "chat_messages": [
+                {
+                    "sender": "assistant",
+                    "created_at": "2024-01-01T10:01:00Z",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "name": "web_search",
+                            "input": {"query": "test query"},
+                        },
+                        {"type": "text", "text": "Here are the results."},
+                    ],
+                }
+            ],
+        }
+    ]
+    create_sample_json(input_file, sample_data)
+
+    result = run_script_command(input_file, output_dir, extra_args=["--no-tools"])
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+    output_files = list(output_dir.glob("*.md"))
+    assert len(output_files) == 1
+
+    with open(output_files[0], "r") as f:
+        content = f.read()
+
+    assert "**Tool: web_search**" not in content
+    assert "Here are the results." in content
 
 
 # No longer need: if __name__ == '__main__': unittest.main()

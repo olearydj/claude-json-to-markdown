@@ -7,7 +7,7 @@ from platformdirs import user_log_dir
 
 # --- Constants for Logging ---
 APP_NAME = "JSONToMarkdownConverter"
-APP_AUTHOR = "ConverterApp"  # Can be your organization or a generic author name
+APP_AUTHOR = "antisimplistic"
 DEFAULT_LOG_FILENAME = "converter.log"
 
 

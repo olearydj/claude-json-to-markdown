@@ -4,7 +4,51 @@ from typing import Optional
 import re
 import logging
 
+from .renderers import RenderOptions, CitationCollector, render_content_item
+
 logger = logging.getLogger("converter_app")
+
+
+def has_meaningful_content(chat_messages: list) -> bool:
+    """Check if any message has non-empty meaningful content.
+
+    This checks for text, voice_note, thinking, or tool_use content.
+    Used to skip conversations where all messages are empty.
+    """
+    for msg in chat_messages:
+        if not isinstance(msg, dict):
+            continue
+
+        # Check msg.text fallback
+        msg_text = msg.get("text", "")
+        if msg_text and msg_text.strip():
+            return True
+
+        # Check content items
+        content_list = msg.get("content", [])
+        if not isinstance(content_list, list):
+            continue
+
+        for item in content_list:
+            if not isinstance(item, dict):
+                continue
+
+            item_type = item.get("type", "text")
+
+            if item_type == "text":
+                if item.get("text", "").strip():
+                    return True
+            elif item_type == "voice_note":
+                if item.get("text", "").strip():
+                    return True
+            elif item_type == "thinking":
+                if item.get("thinking", "").strip():
+                    return True
+            elif item_type in ("tool_use", "tool_result"):
+                # Tool usage counts as meaningful content
+                return True
+
+    return False
 
 
 def load_and_validate_conversations(json_file_path: Path) -> Optional[list]:
@@ -51,18 +95,40 @@ def generate_filename(conversation_data: dict, conv_name: str) -> str:
     return md_filename
 
 
-def generate_markdown_content(conversation_data: dict, conv_name: str) -> list[str]:
+def generate_markdown_content(
+    conversation_data: dict,
+    conv_name: str,
+    options: Optional[RenderOptions] = None,
+) -> list[str]:
     """Generates the Markdown content for a single conversation."""
+    if options is None:
+        options = RenderOptions()
+
     conv_uuid = conversation_data.get("uuid", "unknown_uuid")
     conv_created_at = conversation_data.get("created_at", "N/A")
     conv_updated_at = conversation_data.get("updated_at", "N/A")
+    conv_summary = conversation_data.get("summary")
     chat_messages = conversation_data.get("chat_messages", [])
 
+    citations = CitationCollector()
     md_content_lines = []
+
+    # Header
     md_content_lines.append(f"# Conversation: {conv_name}\n")
     md_content_lines.append(f"**UUID:** {conv_uuid}")
     md_content_lines.append(f"**Created At:** {conv_created_at}")
-    md_content_lines.append(f"**Updated At:** {conv_updated_at}\n")
+    md_content_lines.append(f"**Updated At:** {conv_updated_at}")
+
+    # Summary (if present and enabled)
+    if options.include_summary and conv_summary and conv_summary.strip():
+        md_content_lines.append("")
+        md_content_lines.append("**Summary:**")
+        # Format as blockquote, handling multi-line summaries
+        summary_lines = conv_summary.strip().split("\n")
+        for line in summary_lines:
+            md_content_lines.append(f"> {line}")
+
+    md_content_lines.append("")
     md_content_lines.append("## Messages\n")
 
     for msg_idx, msg in enumerate(chat_messages):
@@ -76,20 +142,10 @@ def generate_markdown_content(conversation_data: dict, conv_name: str) -> list[s
         sender = msg.get("sender", "Unknown Sender")
         msg_created_at = msg.get("created_at", "N/A")
 
-        msg_text_outer = msg.get("text", "")
-        msg_text_inner = ""
-
-        content_list = msg.get("content", [])
-        if isinstance(content_list, list) and len(content_list) > 0:
-            first_content_item = content_list[0]
-            if isinstance(first_content_item, dict):
-                msg_text_inner = first_content_item.get("text", "")
-
-        msg_text_to_use = msg_text_inner if msg_text_inner else msg_text_outer
-
         md_content_lines.append(f"**Sender:** {sender.capitalize()}")
         md_content_lines.append(f"**Timestamp:** {msg_created_at}")
 
+        # Attachments
         files = msg.get("files", [])
         if files and isinstance(files, list):
             file_names = [
@@ -100,10 +156,33 @@ def generate_markdown_content(conversation_data: dict, conv_name: str) -> list[s
             if file_names:
                 md_content_lines.append(f"**Attachments:** {', '.join(file_names)}")
 
-        if msg_text_to_use:
-            md_content_lines.append(f"\n{msg_text_to_use.strip()}\n")
-        else:
-            md_content_lines.append("\n\n")
+        md_content_lines.append("")  # Blank line before content
+
+        # Process ALL content items (not just first)
+        content_list = msg.get("content", [])
+        msg_text_outer = msg.get("text", "")
+
+        has_rendered_content = False
+        if isinstance(content_list, list) and len(content_list) > 0:
+            for content_item in content_list:
+                if isinstance(content_item, dict):
+                    rendered = render_content_item(content_item, options, citations)
+                    if rendered:
+                        md_content_lines.extend(rendered)
+                        has_rendered_content = True
+
+        # Fallback to msg.text if no content items rendered
+        if not has_rendered_content and msg_text_outer:
+            md_content_lines.append(msg_text_outer.strip())
+            md_content_lines.append("")
+        elif not has_rendered_content:
+            md_content_lines.append("")  # Empty message placeholder
+
+    # References section at end (if citations collected and enabled)
+    if options.include_citations:
+        references = citations.render_references_section()
+        md_content_lines.extend(references)
+
     return md_content_lines
 
 
@@ -157,13 +236,18 @@ def create_slug(text: str, max_length: int = 50) -> str:
 
 
 def json_to_markdown(
-    json_file_path: Path, output_dir: Path, limit: Optional[int] = None
+    json_file_path: Path,
+    output_dir: Path,
+    limit: Optional[int] = None,
+    options: Optional[RenderOptions] = None,
 ):
     """
     Reads a JSON file containing a list of conversations, extracts relevant information,
     and writes each conversation to a separate Markdown file in the output directory.
     Can limit the number of conversations processed.
     """
+    if options is None:
+        options = RenderOptions()
     logger.info(
         f"Starting Markdown conversion process. Input: '{json_file_path}', Output dir: '{output_dir}', Limit: {limit}"
     )
@@ -222,7 +306,6 @@ def json_to_markdown(
 
         # Condition 2: Skip if all messages are empty or no messages exist
         chat_messages = conv.get("chat_messages", [])
-        has_any_message_content = False
         if not chat_messages:  # No messages at all
             logger.warning(
                 f"Skipping conversation '{conv_name}' (UUID: {conv_uuid}) due to no messages."
@@ -230,28 +313,7 @@ def json_to_markdown(
             skipped_no_content_count += 1
             continue
 
-        for msg_check in chat_messages:
-            if not isinstance(msg_check, dict):
-                logger.debug(
-                    f"Malformed message object found during pre-check for conv {conv_uuid}. Skipping this message for content check."
-                )
-                continue  # Skip malformed message objects for content check
-            msg_text_outer_check = msg_check.get("text", "")
-            msg_text_inner_check = ""
-            content_list_check = msg_check.get("content", [])
-            if isinstance(content_list_check, list) and len(content_list_check) > 0:
-                first_content_item_check = content_list_check[0]
-                if isinstance(first_content_item_check, dict):
-                    msg_text_inner_check = first_content_item_check.get("text", "")
-
-            msg_text_to_use_check = (
-                msg_text_inner_check if msg_text_inner_check else msg_text_outer_check
-            )
-            if msg_text_to_use_check and msg_text_to_use_check.strip():
-                has_any_message_content = True
-                break  # Found a message with content, no need to check further
-
-        if not has_any_message_content:
+        if not has_meaningful_content(chat_messages):
             logger.warning(
                 f"Skipping conversation '{conv_name}' (UUID: {conv_uuid}) because all messages are empty."
             )
@@ -264,7 +326,7 @@ def json_to_markdown(
 
         md_filename = generate_filename(conv, conv_name)
 
-        md_content_lines = generate_markdown_content(conv, conv_name)
+        md_content_lines = generate_markdown_content(conv, conv_name, options)
 
         md_filepath = output_dir / md_filename
 

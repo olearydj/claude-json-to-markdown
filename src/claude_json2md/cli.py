@@ -5,6 +5,7 @@ import logging
 
 from .log_setup import setup_logging, DEFAULT_LOG_FILENAME
 from .converter import json_to_markdown
+from .renderers import RenderOptions
 
 app = typer.Typer()
 
@@ -49,6 +50,31 @@ def main(
         writable=True,
         resolve_path=True,
     ),
+    no_summary: bool = typer.Option(
+        False,
+        "--no-summary",
+        help="Omit conversation summary from header.",
+    ),
+    no_thinking: bool = typer.Option(
+        False,
+        "--no-thinking",
+        help="Omit Claude's thinking blocks from output.",
+    ),
+    no_citations: bool = typer.Option(
+        False,
+        "--no-citations",
+        help="Omit the References section with citation URLs.",
+    ),
+    no_tools: bool = typer.Option(
+        False,
+        "--no-tools",
+        help="Omit all tool usage information (web_search, artifacts, etc.).",
+    ),
+    verbose_tools: bool = typer.Option(
+        False,
+        "--verbose-tools",
+        help="Show full tool inputs and outputs (artifact content, search results, etc.).",
+    ),
 ):
     """
     Converts conversations from a JSON file to individual Markdown files.
@@ -64,9 +90,7 @@ def main(
     # We still need to create it if it doesn't exist.
     try:
         markdown_output_directory.mkdir(parents=True, exist_ok=True)
-        logger.info(
-            f"Ensured output directory exists: {markdown_output_directory.resolve()}"
-        )
+        logger.debug(f"Output directory ready: {markdown_output_directory.resolve()}")
     except OSError as e:
         logger.error(
             f"Error creating output directory {markdown_output_directory}: {e}"
@@ -74,11 +98,18 @@ def main(
         # Depending on desired behavior, you might want to raise typer.Exit(code=1) here
         return  # Exit if directory cannot be created
 
-    logger.info(
-        f"Input: '{json_input_file.name}'. Output directory: '{markdown_output_directory}'."
+    # Build render options from CLI flags
+    options = RenderOptions(
+        include_summary=not no_summary,
+        include_thinking=not no_thinking,
+        include_citations=not no_citations,
+        include_tools=not no_tools,
+        verbose_tools=verbose_tools,
     )
 
-    json_to_markdown(json_input_file, markdown_output_directory, limit=limit)
+    json_to_markdown(
+        json_input_file, markdown_output_directory, limit=limit, options=options
+    )
     logger.info("Application finished.")
 
 

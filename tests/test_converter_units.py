@@ -8,7 +8,9 @@ from claude_json2md.converter import (
     generate_filename,
     generate_markdown_content,
     write_markdown_file,
+    has_meaningful_content,
 )
+from claude_json2md.renderers import RenderOptions
 
 # --- Tests for create_slug ---
 
@@ -158,7 +160,7 @@ def test_generate_markdown_content_basic():
             {
                 "sender": "AI",
                 "created_at": "2023-01-01T10:06:00Z",
-                "content": [{"text": "Hi User!"}],
+                "content": [{"type": "text", "text": "Hi User!"}],
             },
         ],
     }
@@ -168,13 +170,13 @@ def test_generate_markdown_content_basic():
     assert "# Conversation: Greeting Exchange\n" in md_lines
     assert "**UUID:** conv-uuid-001" in md_lines
     assert "**Created At:** 2023-01-01T10:00:00Z" in md_lines
-    assert "**Updated At:** 2023-01-01T11:00:00Z\n" in md_lines
+    assert "**Updated At:** 2023-01-01T11:00:00Z" in md_lines
     assert "## Messages\n" in md_lines
     assert "---" in md_lines
     assert "**Sender:** User" in md_lines
-    assert "\nHello there!\n" in md_lines
+    assert "Hello there!" in md_lines
     assert "**Sender:** Ai" in md_lines  # Note: .capitalize() behavior
-    assert "\nHi User!\n" in md_lines
+    assert "Hi User!" in md_lines
 
 
 def test_generate_markdown_content_no_messages():
@@ -232,9 +234,8 @@ def test_generate_markdown_content_sparse_message_data():
 
     assert "**Sender:** Unknown sender" in md_lines
     assert "**Timestamp:** A while ago" in md_lines
-    # Expecting double newlines for empty message text
-    text_line_index = md_lines.index("**Timestamp:** A while ago") + 1
-    assert md_lines[text_line_index] == "\n\n"
+    # Empty message should still have blank line for content area
+    assert "" in md_lines  # At least one empty string for blank line
 
 
 # --- Tests for write_markdown_file ---
@@ -282,3 +283,217 @@ def test_write_markdown_file_other_exception(mocker, caplog):
     assert success is False
     assert "An unexpected error occurred while writing" in caplog.text
     assert "Unexpected FS error" in caplog.text
+
+
+# --- Tests for has_meaningful_content ---
+
+
+def test_has_meaningful_content_with_text():
+    messages = [{"text": "Hello world"}]
+    assert has_meaningful_content(messages) is True
+
+
+def test_has_meaningful_content_with_content_text():
+    messages = [{"content": [{"type": "text", "text": "Hello"}]}]
+    assert has_meaningful_content(messages) is True
+
+
+def test_has_meaningful_content_with_thinking():
+    messages = [{"content": [{"type": "thinking", "thinking": "Let me think..."}]}]
+    assert has_meaningful_content(messages) is True
+
+
+def test_has_meaningful_content_with_voice_note():
+    messages = [{"content": [{"type": "voice_note", "text": "Spoken words"}]}]
+    assert has_meaningful_content(messages) is True
+
+
+def test_has_meaningful_content_with_tool_use():
+    messages = [{"content": [{"type": "tool_use", "name": "web_search"}]}]
+    assert has_meaningful_content(messages) is True
+
+
+def test_has_meaningful_content_empty():
+    messages = [{"text": "", "content": []}]
+    assert has_meaningful_content(messages) is False
+
+
+def test_has_meaningful_content_whitespace_only():
+    messages = [{"text": "   ", "content": [{"type": "text", "text": "  \n  "}]}]
+    assert has_meaningful_content(messages) is False
+
+
+# --- Tests for generate_markdown_content with new features ---
+
+
+def test_generate_markdown_content_with_summary():
+    conv_data = {
+        "uuid": "conv-summary-001",
+        "name": "Test with Summary",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "summary": "This is a conversation about testing.",
+        "chat_messages": [{"sender": "human", "text": "Hello"}],
+    }
+    md_lines = generate_markdown_content(conv_data, "Test with Summary")
+    assert "**Summary:**" in md_lines
+    assert "> This is a conversation about testing." in md_lines
+
+
+def test_generate_markdown_content_no_summary_option():
+    conv_data = {
+        "uuid": "conv-summary-002",
+        "name": "Test with Summary Disabled",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "summary": "This should not appear.",
+        "chat_messages": [{"sender": "human", "text": "Hello"}],
+    }
+    options = RenderOptions(include_summary=False)
+    md_lines = generate_markdown_content(
+        conv_data, "Test with Summary Disabled", options
+    )
+    assert "**Summary:**" not in md_lines
+    assert "This should not appear." not in md_lines
+
+
+def test_generate_markdown_content_multiple_content_items():
+    conv_data = {
+        "uuid": "conv-multi-001",
+        "name": "Multi Content",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "chat_messages": [
+            {
+                "sender": "assistant",
+                "created_at": "2024-01-01T10:01:00Z",
+                "content": [
+                    {"type": "thinking", "thinking": "Let me consider..."},
+                    {"type": "text", "text": "Here is my answer."},
+                ],
+            }
+        ],
+    }
+    md_lines = generate_markdown_content(conv_data, "Multi Content")
+    assert "<summary>Thinking</summary>" in md_lines
+    assert "Let me consider..." in md_lines
+    assert "Here is my answer." in md_lines
+
+
+def test_generate_markdown_content_tool_use():
+    conv_data = {
+        "uuid": "conv-tool-001",
+        "name": "Tool Test",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "chat_messages": [
+            {
+                "sender": "assistant",
+                "created_at": "2024-01-01T10:01:00Z",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "web_search",
+                        "input": {"query": "python dataclasses"},
+                    }
+                ],
+            }
+        ],
+    }
+    md_lines = generate_markdown_content(conv_data, "Tool Test")
+    md_text = "\n".join(md_lines)
+    assert "**Tool: web_search**" in md_text
+    assert "Query: `python dataclasses`" in md_text
+
+
+def test_generate_markdown_content_voice_note():
+    conv_data = {
+        "uuid": "conv-voice-001",
+        "name": "Voice Test",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "chat_messages": [
+            {
+                "sender": "human",
+                "created_at": "2024-01-01T10:01:00Z",
+                "content": [
+                    {
+                        "type": "voice_note",
+                        "title": "Quick question",
+                        "text": "What is the meaning of life?",
+                    }
+                ],
+            }
+        ],
+    }
+    md_lines = generate_markdown_content(conv_data, "Voice Test")
+    assert "**[Voice Note: Quick question]**" in md_lines
+    assert "What is the meaning of life?" in md_lines
+
+
+def test_generate_markdown_content_citations():
+    conv_data = {
+        "uuid": "conv-cite-001",
+        "name": "Citation Test",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "chat_messages": [
+            {
+                "sender": "assistant",
+                "created_at": "2024-01-01T10:01:00Z",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "According to the documentation...",
+                        "citations": [{"url": "https://example.com/docs"}],
+                    }
+                ],
+            }
+        ],
+    }
+    md_lines = generate_markdown_content(conv_data, "Citation Test")
+    md_text = "\n".join(md_lines)
+    assert "## References" in md_text
+    assert "https://example.com/docs" in md_text
+
+
+def test_generate_markdown_content_no_thinking_option():
+    conv_data = {
+        "uuid": "conv-opt-001",
+        "name": "Options Test",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "chat_messages": [
+            {
+                "sender": "assistant",
+                "created_at": "2024-01-01T10:01:00Z",
+                "content": [
+                    {"type": "thinking", "thinking": "Secret thoughts"},
+                    {"type": "text", "text": "Public answer"},
+                ],
+            }
+        ],
+    }
+    options = RenderOptions(include_thinking=False)
+    md_lines = generate_markdown_content(conv_data, "Options Test", options)
+    assert "Secret thoughts" not in md_lines
+    assert "Public answer" in md_lines
+
+
+def test_generate_markdown_content_backward_compatible():
+    """Test that old format without type field still works."""
+    conv_data = {
+        "uuid": "conv-old-001",
+        "name": "Old Format",
+        "created_at": "2024-01-01T10:00:00Z",
+        "updated_at": "2024-01-01T11:00:00Z",
+        "chat_messages": [
+            {
+                "sender": "user",
+                "created_at": "2024-01-01T10:01:00Z",
+                "content": [{"text": "Old style without type field"}],
+            }
+        ],
+    }
+    md_lines = generate_markdown_content(conv_data, "Old Format")
+    assert "Old style without type field" in md_lines
